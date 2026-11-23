@@ -1,84 +1,136 @@
 
-import { useState } from "react";
-
-import Navbar from "./components/Navbar";
-import Hero from "./components/Hero";
-import MatchCard from "./components/MatchCard";
+import React, { useState } from "react";
+import "./App.css";
 
 function App() {
-
-  const [bookingCount, setBookingCount] = useState(0);
+  const [bookings, setBookings] = useState([]);
 
   const matches = [
     {
       id: 1,
-      team1: "Royal Challengers Bengaluru",
-      team2: "Chennai Super Kings",
-      date: "20 April 2027",
-      venue: "M. Chinnaswamy Stadium",
-      price: 1500,
-      seats: 100
+      team1: "CSK",
+      team2: "MI",
+      date: "20 April 2026",
+      venue: "Chennai"
     },
-
     {
       id: 2,
-      team1: "Mumbai Indians",
-      team2: "Kolkata Knight Riders",
-      date: "22 April 2027",
-      venue: "Wankhede Stadium",
-      price: 1200,
-      seats: 80
+      team1: "RCB",
+      team2: "KKR",
+      date: "22 April 2026",
+      venue: "Bengaluru"
     },
-
     {
       id: 3,
-      team1: "Sunrisers Hyderabad",
-      team2: "Rajasthan Royals",
-      date: "25 April 2027",
-      venue: "Rajiv Gandhi Stadium",
-      price: 1000,
-      seats: 0
+      team1: "SRH",
+      team2: "RR",
+      date: "24 April 2026",
+      venue: "Hyderabad"
     }
   ];
 
-  function handleBooking() {
-    setBookingCount(bookingCount + 1);
-  }
+  const toggleBooking = (match) => {
+    if (bookings.some((booking) => booking.id === match.id)) {
+      setBookings(bookings.filter((booking) => booking.id !== match.id));
+    } else {
+      setBookings([...bookings, match]);
+    }
+  };
 
   return (
-    <div>
+    <div className="app">
 
-      <Navbar bookingCount={bookingCount} />
+      {/* Navbar */}
+      <nav className="navbar">
+        <h2>IPL TICKET BOOKING</h2>
 
-      <Hero />
-
-      <section className="matches-section" id="matches">
-
-        <p className="section-tag">DON'T MISS THE ACTION</p>
-
-        <h1>Upcoming Matches</h1>
-
-        <p className="section-description">
-          Choose your favourite team and book your tickets.
-        </p>
-
-        <div className="matches-container">
-
-          {matches.map((match) => (
-            <MatchCard
-              key={match.id}
-              match={match}
-              onBook={handleBooking}
-            />
-          ))}
-
+        <div className="nav-links">
+          <a href="#home">Home</a>
+          <a href="#matches">Matches</a>
+          <a href="#matches">Book Tickets</a>
+          <a href="#bookings">My Bookings</a>
         </div>
 
+        <div className="booking-count">
+          Bookings: {bookings.length}
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="hero" id="home">
+        <h1>Experience the Stadium Energy Live!</h1>
+        <p>
+          Don't just watch the game. Be part of the action.
+          Book your IPL tickets today!
+        </p>
+
+        <button
+          className="explore-btn"
+          onClick={() =>
+            document.getElementById("matches").scrollIntoView({
+              behavior: "smooth"
+            })
+          }
+        >
+          Explore Matches
+        </button>
       </section>
 
-      <footer id="booking">
-        <p>© 2026 IPLZONE | Cricket. Passion. Excitement.</p>
-      </footer>
+      {/* Upcoming Matches */}
+      <section className="matches-section" id="matches">
+        <h2>Upcoming Matches</h2>
+
+        <div className="match-container">
+          {matches.map((match) => {
+            const isBooked = bookings.some(
+              (booking) => booking.id === match.id
+            );
+
+            return (
+              <div className="match-card" key={match.id}>
+                <h3>
+                  {match.team1} vs {match.team2}
+                </h3>
+
+                <p>Date: {match.date}</p>
+                <p>Venue: {match.venue}</p>
+
+                <button
+                  className="book-btn"
+                  onClick={() => toggleBooking(match)}
+                >
+                  {isBooked ? "Cancel Booking" : "Book Tickets"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* My Bookings */}
+      <section className="my-bookings" id="bookings">
+        <h2>My Bookings</h2>
+
+        <p className="total-bookings">
+          Total Bookings: {bookings.length}
+        </p>
+
+        {bookings.length === 0 ? (
+          <p>No tickets booked yet!</p>
+        ) : (
+          <div className="booking-list">
+            {bookings.map((booking) => (
+              <div className="booking-item" key={booking.id}>
+                <h3>
+                  {booking.team1} vs {booking.team2}
+                </h3>
+                <p>Date: {booking.date}</p>
+                <p>Venue: {booking.venue}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
     </div>
   );
