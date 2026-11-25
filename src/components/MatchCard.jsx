@@ -1,48 +1,89 @@
 
-import { useState } from "react";
+import { useState } from 'react';
 
 function MatchCard({ match, onBook }) {
-  const [booked, setBooked] = useState(false);
+    const [customerName, setCustomerName] = useState('');
+    const [tickets, setTickets] = useState(1);
+    const [booking, setBooking] = useState(false);
 
-  function handleBooking() {
-    if (!booked && match.seats > 0) {
-      setBooked(true);
-      onBook();
-    }
-  }
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
-  return (
-    <div className="match-card">
+        setBooking(true);
 
-      <div className="match-label">IPL MATCH</div>
+        try {
+            await onBook(match, customerName, Number(tickets));
+            setCustomerName('');
+            setTickets(1);
+        } finally {
+            setBooking(false);
+        }
+    };
 
-      <h2>{match.team1}</h2>
+    return (
+        <div className="match-card">
 
-      <p className="vs">VS</p>
+            <div className="match-header">
+                <span className="match-label">IPL MATCH</span>
+                <span className="match-id">Match #{match.id}</span>
+            </div>
 
-      <h2>{match.team2}</h2>
+            <div className="teams">
+                <h3>{match.team1}</h3>
+                <span className="vs">VS</span>
+                <h3>{match.team2}</h3>
+            </div>
 
-      <div className="match-details">
-        <p>📅 {match.date}</p>
-        <p>📍 {match.venue}</p>
-        <p>🎟️ ₹{match.price}</p>
-        <p>Seats left: {match.seats}</p>
-      </div>
+            <div className="match-details">
+                <p>
+                    📅 <strong>Date:</strong> {match.match_date}
+                </p>
 
-      <button
-        className={match.seats === 0 ? "sold-btn" : "book-btn"}
-        onClick={handleBooking}
-        disabled={match.seats === 0 || booked}
-      >
-        {match.seats === 0
-          ? "Sold Out"
-          : booked
-          ? "Booked!"
-          : "Book Ticket"}
-      </button>
+                <p>
+                    📍 <strong>Venue:</strong> {match.venue}
+                </p>
 
-    </div>
-  );
+                <p>
+                    💰 <strong>Ticket Price:</strong> ₹{match.price}
+                </p>
+
+                <p>
+                    🎟️ <strong>Available Seats:</strong>{' '}
+                    {match.available_seats}
+                </p>
+            </div>
+
+            {match.available_seats > 0 ? (
+                <form onSubmit={handleSubmit} className="booking-form">
+
+                    <input
+                        type="text"
+                        placeholder="Enter your name"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        required
+                    />
+
+                    <input
+                        type="number"
+                        min="1"
+                        max={match.available_seats}
+                        value={tickets}
+                        onChange={(e) => setTickets(e.target.value)}
+                        required
+                    />
+
+                    <button type="submit" disabled={booking}>
+                        {booking ? 'Booking...' : 'Book Tickets'}
+                    </button>
+
+                </form>
+            ) : (
+                <p className="sold-out">SOLD OUT</p>
+            )}
+
+        </div>
+    );
 }
 
 export default MatchCard;

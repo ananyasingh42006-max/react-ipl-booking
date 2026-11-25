@@ -1,139 +1,396 @@
 
-import React, { useState } from "react";
-import "./App.css";
+import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
+import MatchCard from './components/MatchCard';
+import './App.css';
 
 function App() {
-  const [bookings, setBookings] = useState([]);
+    const [matches, setMatches] = useState([]);
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [bookingLoading, setBookingLoading] = useState(false);
+    const [message, setMessage] = useState('');
+    const [messageType, setMessageType] = useState('');
 
-  const matches = [
-    {
-      id: 1,
-      team1: "CSK",
-      team2: "MI",
-      date: "20 April 2026",
-      venue: "Chennai"
-    },
-    {
-      id: 2,
-      team1: "RCB",
-      team2: "KKR",
-      date: "22 April 2026",
-      venue: "Bengaluru"
-    },
-    {
-      id: 3,
-      team1: "SRH",
-      team2: "RR",
-      date: "24 April 2026",
-      venue: "Hyderabad"
-    }
-  ];
+    // Fetch IPL matches from Supabase
+    const fetchMatches = async () => {
+        const { data, error } = await supabase
+            .from('matches')
+            .select('*')
+            .order('id');
 
-  const toggleBooking = (match) => {
-    if (bookings.some((booking) => booking.id === match.id)) {
-      setBookings(bookings.filter((booking) => booking.id !== match.id));
-    } else {
-      setBookings([...bookings, match]);
-    }
-  };
+        if (error) {
+            console.error('Match fetching error:', error);
+            setMessage('Unable to load matches. Please try again.');
+            setMessageType('error');
+        } else {
+            setMatches(data);
+        }
 
-  return (
-    <div className="app">
+        setLoading(false);
+    };
 
-      {/* Navbar */}
-      <nav className="navbar">
-        <h2>IPL TICKET BOOKING</h2>
+    // Fetch all booking details from Supabase
+    const fetchBookings = async () => {
+        const { data, error } = await supabase
+            .from('bookings')
+            .select(`
+                id,
+                customer_name,
+                tickets,
+                created_at,
+                matches (
+                    team1,
+                    team2,
+                    venue,
+                    price
+                )
+            `)
+            .order('created_at', { ascending: false });
 
-        <div className="nav-links">
-          <a href="#home">Home</a>
-          <a href="#matches">Matches</a>
-          <a href="#matches">Book Tickets</a>
-          <a href="#bookings">My Bookings</a>
-        </div>
+        if (error) {
+            console.error('Booking fetching error:', error);
+            return;
+        }
 
-        <div className="booking-count">
-          Bookings: {bookings.length}
-        </div>
-      </nav>
+        setBookings(data);
+    };
 
-      {/* Hero Section */}
-      <section className="hero" id="home">
-        <h1>Experience the Stadium Energy Live!</h1>
-        <p>
-          Don't just watch the game. Be part of the action.
-          Book your IPL tickets today!
-        </p>
+    // Handle ticket booking
+    const handleBooking = async (match, customerName, tickets) => {
 
-        <button
-          className="explore-btn"
-          onClick={() =>
-            document.getElementById("matches").scrollIntoView({
-              behavior: "smooth"
-            })
-          }
-        >
-          Explore Matches
-        </button>
-      </section>
+        setMessage('');
 
-      {/* Upcoming Matches */}
-      <section className="matches-section" id="matches">
-        <h2>Upcoming Matches</h2>
+        if (!customerName.trim() ||
+            !Number.isInteger(tickets) ||
+            tickets < 1) {
 
-        <div className="match-container">
-          {matches.map((match) => {
-            const isBooked = bookings.some(
-              (booking) => booking.id === match.id
+            setMessage('Please enter valid booking details.');
+            setMessageType('error');
+            return;
+        }
+
+        if (tickets > match.available_seats) {
+            setMessage('Sorry! Not enough seats available.');
+            setMessageType('error');
+            return;
+        }
+
+        setBookingLoading(true);
+
+        try {
+
+            // Step 1: Update available seats
+            const { data: updatedMatch, error: updateError } =
+                await supabase
+                    .from('matches')
+                    .update({
+                        available_seats:
+                            match.available_seats - tickets
+                    })
+                    .eq('id', match.id)
+                    .eq('available_seats', match.available_seats)
+                    .select();
+
+            if (updateError ||
+                !updatedMatch ||
+                updatedMatch.length === 0) {
+
+                setMessage(
+                    'Seats have changed. Please refresh and try again.'
+                );
+
+                setMessageType('error');
+                await fetchMatches();
+                return;
+            }
+
+            // Step 2: Insert booking into database
+            const { error: bookingError } = await supabase
+                .from('bookings')
+                .insert([
+                    {
+                        match_id: match.id,
+                        customer_name: customerName.trim(),
+                        tickets: tickets
+                    }
+                ]);
+
+            if (bookingError) {
+
+                console.error('Booking error:', bookingError);
+
+                // Restore seats if booking insertion fails
+                const { error: restoreError } = await supabase
+                    .from('matches')
+                    .update({
+                        available_seats: match.available_seats
+                    })
+                    .eq('id', match.id)
+                    .eq(
+                        'available_seats',
+                        match.available_seats - tickets
+                    );
+
+                if (restoreError) {
+                    console.error('Seat restoration error:', restoreError);
+                }
+
+                setMessage('Booking failed. Please try again.');
+                setMessageType('error');
+
+                await fetchMatches();
+                return;
+            }
+
+            // Step 3: Show success message
+            setMessage(
+                `Congratulations! ${tickets} ticket(s) booked successfully for ${match.team1} vs ${match.team2}.`
             );
 
-            return (
-              <div className="match-card" key={match.id}>
-                <h3>
-                  {match.team1} vs {match.team2}
-                </h3>
+            setMessageType('success');
 
-                <p>Date: {match.date}</p>
-                <p>Venue: {match.venue}</p>
+            // Step 4: Refresh website data
+            await fetchMatches();
+            await fetchBookings();
 
-                <button
-                  className="book-btn"
-                  onClick={() => toggleBooking(match)}
-                >
-                  {isBooked ? "Cancel Booking" : "Book Tickets"}
-                </button>
-              </div>
-            );
-          })}
+        } catch (error) {
+
+            console.error(error);
+
+            setMessage('Something went wrong. Please try again.');
+            setMessageType('error');
+
+        } finally {
+            setBookingLoading(false);
+        }
+    };
+
+    // Load data and subscribe to realtime changes
+    useEffect(() => {
+
+        fetchMatches();
+        fetchBookings();
+
+        const channel = supabase
+            .channel('ipl-live-updates')
+
+            // Listen for match changes
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'matches'
+                },
+                () => {
+                    fetchMatches();
+                }
+            )
+
+            // Listen for booking changes
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'bookings'
+                },
+                () => {
+                    fetchBookings();
+                }
+            )
+
+            .subscribe((status) => {
+                console.log('Realtime status:', status);
+            });
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+
+    }, []);
+
+    return (
+        <div className="app">
+
+            {/* NAVBAR */}
+            <header className="navbar">
+
+                <h2>🏏 IPL TICKET BOOKING</h2>
+
+                <span>
+                    Book Your Match Tickets
+                </span>
+
+            </header>
+
+
+            {/* HERO SECTION */}
+            <section className="hero">
+
+                <h1>
+                    Experience the IPL Live!
+                </h1>
+
+                <p>
+                    Feel the excitement of cricket.
+                    Book your favourite IPL match tickets today!
+                </p>
+
+                <a href="#matches" className="hero-btn">
+                    Explore Matches
+                </a>
+
+            </section>
+
+
+            {/* MATCH SECTION */}
+            <main className="main-content" id="matches">
+
+                <h2 className="section-title">
+                    Upcoming IPL Matches
+                </h2>
+
+                {message && (
+                    <div className={`message ${messageType}`}>
+                        {message}
+                    </div>
+                )}
+
+                {loading ? (
+
+                    <p className="status">
+                        Loading IPL matches...
+                    </p>
+
+                ) : matches.length === 0 ? (
+
+                    <p className="status">
+                        No matches available currently.
+                    </p>
+
+                ) : (
+
+                    <div className="matches-grid">
+
+                        {matches.map((match) => (
+
+                            <MatchCard
+                                key={match.id}
+                                match={match}
+                                onBook={handleBooking}
+                                bookingLoading={bookingLoading}
+                            />
+
+                        ))}
+
+                    </div>
+
+                )}
+
+            </main>
+
+
+            {/* MY BOOKINGS SECTION */}
+            <section className="bookings-section">
+
+                <h2 className="section-title">
+                    🎟️ My Bookings
+                </h2>
+
+                <p className="booking-count">
+                    Total Bookings: {bookings.length}
+                </p>
+
+                {bookings.length === 0 ? (
+
+                    <p className="status">
+                        No bookings yet. Book your first IPL ticket!
+                    </p>
+
+                ) : (
+
+                    <div className="booking-table-container">
+
+                        <table className="booking-table">
+
+                            <thead>
+
+                                <tr>
+                                    <th>Booking ID</th>
+                                    <th>Customer Name</th>
+                                    <th>Match</th>
+                                    <th>Venue</th>
+                                    <th>Tickets</th>
+                                    <th>Booking Date</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                {bookings.map((booking) => (
+
+                                    <tr key={booking.id}>
+
+                                        <td>
+                                            #{booking.id}
+                                        </td>
+
+                                        <td>
+                                            {booking.customer_name}
+                                        </td>
+
+                                        <td>
+                                            {booking.matches
+                                                ? `${booking.matches.team1} vs ${booking.matches.team2}`
+                                                : 'Match unavailable'}
+                                        </td>
+
+                                        <td>
+                                            {booking.matches?.venue || '-'}
+                                        </td>
+
+                                        <td>
+                                            {booking.tickets}
+                                        </td>
+
+                                        <td>
+                                            {booking.created_at
+                                                ? new Date(
+                                                    booking.created_at
+                                                ).toLocaleDateString('en-IN')
+                                                : '-'}
+                                        </td>
+
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                )}
+
+            </section>
+
+
+            {/* FOOTER */}
+            <footer className="footer">
+
+                <p>
+                    © 2026 IPL Ticket Booking
+                    | Powered by React and Supabase
+                </p>
+
+            </footer>
+
         </div>
-      </section>
-
-      {/* My Bookings */}
-      <section className="my-bookings" id="bookings">
-        <h2>My Bookings</h2>
-
-        <p className="total-bookings">
-          Total Bookings: {bookings.length}
-        </p>
-
-        {bookings.length === 0 ? (
-          <p>No tickets booked yet!</p>
-        ) : (
-          <div className="booking-list">
-            {bookings.map((booking) => (
-              <div className="booking-item" key={booking.id}>
-                <h3>
-                  {booking.team1} vs {booking.team2}
-                </h3>
-                <p>Date: {booking.date}</p>
-                <p>Venue: {booking.venue}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-    </div>
-  );
+    );
 }
 
 export default App;
